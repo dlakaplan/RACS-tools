@@ -25,11 +25,11 @@ VERSION = '1.0.5'
 # What packages are required for this module to be executed?
 REQUIRED = [
     'astropy', 'radio_beam', 'schwimmbad', 'psutil', 'matplotlib',
-    'scipy', 'numpy', 'spectral_cube', 'tqdm', 'ipython', 'mpi4py'
+    'scipy', 'numpy', 'tqdm', 
 ]
 
 # What packages are optional?
-EXTRAS = {
+EXTRAS = {'mpi4py','ipython','spectral_cube',
     # 'fancy feature': ['django'],
 }
 
