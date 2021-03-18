@@ -19,8 +19,6 @@ import functools
 import schwimmbad
 import psutil
 from tqdm import tqdm
-from IPython import embed
-import matplotlib.pyplot as plt
 import warnings
 try:
     print = functools.partial(
@@ -78,14 +76,18 @@ def getimdata(cubenm, verbose=False):
         print(f'Getting image data from {cubenm}')
     with fits.open(cubenm, memmap=True, mode='denywrite') as hdu:
 
-        w = astropy.wcs.WCS(hdu)
+        w = astropy.wcs.WCS(hdu[0])
         pixelscales = astropy.wcs.utils.proj_plane_pixel_scales(w)
         
         dxas = pixelscales[0]*u.deg
         dyas = pixelscales[1]*u.deg
 
-        nx, ny = hdu[0].data[0, 0, :,
-                             :].shape[0], hdu[0].data[0, 0, :, :].shape[1]
+        if len(hdu[0].data)==4:
+            # has spectral, polarization axes
+            data = hdu[0].data[0,0]
+        else:
+            data = hdu[0].data
+        nx, ny = data.shape[1], data.shape[0]
 
         old_beam = Beam.from_fits_header(
             hdu[0].header
@@ -93,7 +95,7 @@ def getimdata(cubenm, verbose=False):
 
         datadict = {
             'filename': os.path.basename(cubenm),
-            'image': hdu[0].data[0, 0, :, :],
+            'image': data, 
             'header': hdu[0].header,
             'oldbeam': old_beam,
             'nx': nx,
