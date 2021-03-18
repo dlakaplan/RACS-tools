@@ -20,6 +20,7 @@ import schwimmbad
 import psutil
 from tqdm import tqdm
 import warnings
+from astropy import log
 try:
     print = functools.partial(
         print, f'[{psutil.Process().cpu_num()}]', flush=True)
@@ -40,11 +41,10 @@ def my_ceil(a, precision=0):
     return np.round(a + 0.5 * 10**(-precision), precision)
 
 
-def getbeam(datadict, new_beam, cutoff=None, verbose=False):
+def getbeam(datadict, new_beam, cutoff=None):
     """Get beam info
     """
-    if verbose:
-        print(f"Current beam is", datadict['oldbeam'])
+    log.info("Current beam is {}".format(str(datadict['oldbeam'])))
 
     if cutoff is not None and datadict['oldbeam'].major.to(u.arcsec) > cutoff*u.arcsec:
         return np.nan, np.nan
@@ -69,11 +69,11 @@ def getbeam(datadict, new_beam, cutoff=None, verbose=False):
         return conbm, fac
 
 
-def getimdata(cubenm, verbose=False):
+def getimdata(cubenm):
     """Get fits image data
     """
-    if verbose:
-        print(f'Getting image data from {cubenm}')
+    
+    log.info(f'Getting image data from {cubenm}')
     with fits.open(cubenm, memmap=True, mode='denywrite') as hdu:
 
         w = astropy.wcs.WCS(hdu[0])
@@ -87,7 +87,7 @@ def getimdata(cubenm, verbose=False):
             data = hdu[0].data[0,0]
         else:
             data = hdu[0].data
-        nx, ny = data.shape[1], data.shape[0]
+        nx, ny = data.shape[-1], data.shape[-2]
 
         old_beam = Beam.from_fits_header(
             hdu[0].header
@@ -105,19 +105,17 @@ def getimdata(cubenm, verbose=False):
         }
     return datadict
 
-def smooth(datadict, conv_mode='robust', verbose=False):
+def smooth(datadict, conv_mode='robust'):
     """Do the smoothing
     """
     if np.isnan(datadict["sfactor"]):
-        if verbose:
-            print('Beam larger than cutoff -- blanking')
+        log.warning('Beam larger than cutoff -- blanking')
         newim = np.ones_like(datadict['image']) * np.nan
         return newim
     else:
         # using Beams package
-        if verbose:
-            print(f'Smoothing so beam is', datadict["final_beam"])
-            print(f'Using convolving beam', datadict["conbeam"])
+        log.info('Smoothing so beam is {}'.format(str(datadict["final_beam"])))
+        log.info('Using convolving beam {}'.format(str(datadict["conbeam"])))
         pix_scale = datadict['dy']
 
         gauss_kern = datadict["conbeam"].as_kernel(pix_scale)
@@ -150,8 +148,7 @@ def smooth(datadict, conv_mode='robust', verbose=False):
                 normalize_kernel=False,
                 allow_huge=True,
             )
-        if verbose:
-            print(f'Using scaling factor', fac)
+        log.info('Using scaling factor {}'.format(fac))
         newim *= fac
         return newim
 
@@ -217,7 +214,7 @@ def worker(args):
 
 
 def getmaxbeam(files, conv_mode='robust', target_beam=None, cutoff=None,
-               tolerance=0.0001, nsamps=200, epsilon=0.0005, verbose=False):
+               tolerance=0.0001, nsamps=200, epsilon=0.0005):
     """Get smallest common beam
     """
     beams = []
@@ -239,9 +236,7 @@ def getmaxbeam(files, conv_mode='robust', target_beam=None, cutoff=None,
         cmn_beam = beams[~flags].common_beam(
             tolerance=tolerance, epsilon=epsilon, nsamps=nsamps)
     except BeamError:
-        if verbose:
-            print("Couldn't find common beam with defaults")
-            print("Trying again with smaller tolerance")
+        log.warning("Couldn't find common beam with defaults\nTrying again with smaller tolerance")
         cmn_beam = beams[~flags].common_beam(
             tolerance=tolerance*0.1, epsilon=epsilon, nsamps=nsamps)
 
@@ -285,8 +280,7 @@ def getmaxbeam(files, conv_mode='robust', target_beam=None, cutoff=None,
                     u.arcsec).value, precision=1)*u.arcsec,
                 pa=round_up(nyq_beam.pa.to(u.deg), decimals=2)
             )
-            if verbose:
-                print('Smallest common Nyquist sampled beam is:', nyq_beam)
+            log.info('Smallest common Nyquist sampled beam is:', nyq_beam)
             if target_beam is not None:
                 if target_beam < nyq_beam:
                     warnings.warn('TARGET BEAM WILL BE UNDERSAMPLED!')
