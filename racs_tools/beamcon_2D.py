@@ -21,6 +21,7 @@ import psutil
 from tqdm import tqdm
 import warnings
 from astropy import log
+import logging
 try:
     print = functools.partial(
         print, f'[{psutil.Process().cpu_num()}]', flush=True)
@@ -154,12 +155,12 @@ def smooth(datadict, conv_mode='robust'):
         return newim
 
 
-def savefile(datadict, filename, outdir='.', verbose=False):
+def savefile(datadict, filename, outdir='.'):
     """Save file to disk
     """
     outfile = f'{outdir}/{filename}'
-    if verbose:
-        print(f'Saving to {outfile}')
+    
+    log.info('Saving to %s' % outfile)
     header = datadict['header']
     beam = datadict['final_beam']
     header = beam.attach_to_header(header)
@@ -171,9 +172,8 @@ def savefile(datadict, filename, outdir='.', verbose=False):
 
 
 def worker(args):
-    file, outdir, new_beam, conv_mode, clargs, verbose = args
-    if verbose:
-        print(f'Working on {file}')
+    file, outdir, new_beam, conv_mode, clargs = args
+    log.info('Working on %s' % file)
 
     if outdir is None:
         outdir = os.path.dirname(file)
@@ -191,7 +191,6 @@ def worker(args):
         datadict,
         new_beam,
         cutoff=clargs.cutoff,
-        verbose=verbose
     )
 
     datadict.update(
@@ -202,14 +201,14 @@ def worker(args):
         }
     )
 
-    newim = smooth(datadict, conv_mode=conv_mode, verbose=verbose)
+    newim = smooth(datadict, conv_mode=conv_mode)
     datadict.update(
         {
             "newimage": newim,
         }
     )
 
-    savefile(datadict, outfile, outdir, verbose=verbose)
+    savefile(datadict, outfile, outdir)
 
     return datadict
 
@@ -294,13 +293,12 @@ def getmaxbeam(files, conv_mode='robust', target_beam=None, cutoff=None,
     return cmn_beam, beams
 
 
-def writelog(output, commonbeam_log, verbose=True):
+def writelog(output, commonbeam_log):
     """Write beamlog file
 
     Args:
         output (list): Output dicts from worker opertation
         commonbeam_log (str): Filename to save log
-        verbose (bool, optional): Verbose output. Defaults to True.
     """
     commonbeam_tab = Table()
     commonbeam_tab.add_column([out['filename']
@@ -340,16 +338,14 @@ def writelog(output, commonbeam_log, verbose=True):
         format='commented_header',
         overwrite=True
     )
-    if verbose:
-        print(f'Convolving log written to {commonbeam_log}')
+    log.info('Convolving log written to %s' % commonbeam_log)
 
 
-def main(pool, args, verbose=False):
+def main(pool, args):
     """Main script
     """
     if args.dryrun:
-        if verbose:
-            print('Doing a dry run -- no files will be saved')
+        log.info('Doing a dry run -- no files will be saved')
     # Fix up outdir
     outdir = args.outdir
     if outdir is not None:
@@ -366,19 +362,17 @@ def main(pool, args, verbose=False):
     # Parse args
 
     conv_mode = args.conv_mode
-    print(conv_mode)
-    if not conv_mode == 'robust' and not conv_mode == 'scipy' and \
-            not conv_mode == 'astropy' and not conv_mode == 'astropy_fft':
+    log.info('Convolution mode: %s' % conv_mode)
+    if not conv_mode in ['robust','scipy','astropy','astropy_fft']:
         raise Exception('Please select valid convolution method!')
 
-    if verbose:
-        print(f"Using convolution method {conv_mode}")
-        if conv_mode == 'robust':
-            print("This is the most robust method. And fast!")
-        elif conv_mode == 'scipy':
-            print('This fast, but not robust to NaNs or small PSF changes')
-        else:
-            print('This is slower, but robust to NaNs, but not to small PSF changes')
+    log.info('Using convolution method %s' % conv_mode)
+    if conv_mode == 'robust':
+        log.info('This is the most robust method. And fast!')
+    elif conv_mode == 'scipy':
+        log.info('This fast, but not robust to NaNs or small PSF changes')
+    else:
+        log.info('This is slower, but robust to NaNs, but not to small PSF changes')
 
     bmaj = args.bmaj
     bmin = args.bmin
@@ -398,8 +392,7 @@ def main(pool, args, verbose=False):
             bmin * u.arcsec,
             bpa * u.deg
         )
-        if verbose:
-            print('Target beam is ', target_beam)
+        log.info('Target beam is %s' % target_beam)
 
     # Find smallest common beam
     big_beam, allbeams = getmaxbeam(files,
@@ -408,12 +401,10 @@ def main(pool, args, verbose=False):
                                     cutoff=args.cutoff,
                                     tolerance=args.tolerance,
                                     nsamps=args.nsamps,
-                                    epsilon=args.epsilon,
-                                    verbose=verbose)
+                                    epsilon=args.epsilon)
 
     if target_beam is not None:
-        if verbose:
-            print('Checking that target beam will deconvolve...')
+        log.info('Checking that target beam will deconvolve...')
 
         mask_count = 0
         failed = []
@@ -422,7 +413,7 @@ def main(pool, args, verbose=False):
                 zip(allbeams, files),
                 total=len(allbeams),
                 desc='Deconvolving',
-                disable=(not verbose)
+                disable=(log.level > logging.INFO)
             )
         ):
             try:
@@ -431,9 +422,8 @@ def main(pool, args, verbose=False):
                 mask_count += 1
                 failed.append(file)
         if mask_count > 0:
-            if verbose:
-                print('The following images could not reach target resolution:')
-                print(failed)
+            log.info('The following images could not reach target resolution:')
+            log.info(failed)
             raise Exception("Please choose a larger target beam!")
 
         else:
@@ -442,19 +432,17 @@ def main(pool, args, verbose=False):
     else:
         new_beam = big_beam
 
-    if verbose:
-        print(f'Final beam is', new_beam)
-    inputs = [[file, outdir, new_beam, conv_mode, args, verbose]
+    log.info('Final beam is %s' new_beam)
+    inputs = [[file, outdir, new_beam, conv_mode, args]
               for i, file in enumerate(files)]
 
     if not args.dryrun:
         output = list(pool.map(worker, inputs))
 
         if args.log is not None:
-            writelog(output, args.log, verbose=verbose)
+            writelog(output, args.log)
 
-    if verbose:
-        print('Done!')
+    log.info('Done!')
 
 
 def cli():
@@ -517,8 +505,11 @@ def cli():
         """
     )
 
-    parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
-                        help="verbose output [False].")
+    #parser.add_argument("-v", "--verbose", dest="verbose", action="store_true",
+    #                    help="verbose output [False].")
+    parser.add_argument(
+        "-v", "--verbosity", action="count", help="Increase output verbosity"
+    )
 
     parser.add_argument("-d", "--dryrun", dest="dryrun", action="store_true",
                         help="Compute common beam and stop [False].")
@@ -591,16 +582,18 @@ def cli():
                        action="store_true", help="Run with MPI.")
 
     args = parser.parse_args()
+    if args.verbosity == 1:
+        log.setLevel("INFO")
+    elif args.verbosity >= 2:
+        log.setLevel("DEBUG")
 
-    pool = schwimmbad.choose_pool(mpi=args.mpi, processes=args.n_cores)
+    poolset = schwimmbad.choose_pool(mpi=args.mpi, processes=args.n_cores)
     if args.mpi:
         if not pool.is_master():
             pool.wait()
             sys.exit(0)
 
-    verbose = args.verbose
-
-    main(pool, args, verbose=verbose)
+    main(pool, args)
     pool.close()
 
 
