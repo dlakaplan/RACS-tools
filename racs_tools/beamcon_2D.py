@@ -432,7 +432,7 @@ def main(pool, args):
     else:
         new_beam = big_beam
 
-    log.info('Final beam is %s' new_beam)
+    log.info('Final beam is %s' % new_beam)
     inputs = [[file, outdir, new_beam, conv_mode, args]
               for i, file in enumerate(files)]
 
@@ -587,7 +587,7 @@ def cli():
     elif args.verbosity >= 2:
         log.setLevel("DEBUG")
 
-    poolset = schwimmbad.choose_pool(mpi=args.mpi, processes=args.n_cores)
+    pool = schwimmbad.choose_pool(mpi=args.mpi, processes=args.n_cores)
     if args.mpi:
         if not pool.is_master():
             pool.wait()
