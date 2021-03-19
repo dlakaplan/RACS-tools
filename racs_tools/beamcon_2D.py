@@ -496,11 +496,10 @@ def cli():
     parser.add_argument(
         "--conv_mode",
         dest="conv_mode",
-        type=str,
         default='robust',
+        choices=['robust','scipy','astropy','astropy_fft'],
         help="""Which method to use for convolution [robust].
         'robust' uses the built-in, FFT-based method.
-        Can also be 'scipy', 'astropy', or 'astropy_fft'.
         Note these other methods cannot cope well with small convolving beams.
         """
     )
