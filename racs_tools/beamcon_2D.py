@@ -83,7 +83,7 @@ def getimdata(cubenm):
         dxas = pixelscales[0]*u.deg
         dyas = pixelscales[1]*u.deg
 
-        if len(hdu[0].data)==4:
+        if len(hdu[0].data.shape)==4:
             # has spectral, polarization axes
             data = hdu[0].data[0,0]
         else:
@@ -96,7 +96,8 @@ def getimdata(cubenm):
 
         datadict = {
             'filename': os.path.basename(cubenm),
-            'image': data, 
+            'image': data,
+            '4d': (len(hdu[0].data.shape) == 4),
             'header': hdu[0].header,
             'oldbeam': old_beam,
             'nx': nx,
@@ -118,7 +119,6 @@ def smooth(datadict, conv_mode='robust'):
         log.info('Smoothing so beam is {}'.format(str(datadict["final_beam"])))
         log.info('Using convolving beam {}'.format(str(datadict["conbeam"])))
         pix_scale = datadict['dy']
-
         gauss_kern = datadict["conbeam"].as_kernel(pix_scale)
         conbm1 = gauss_kern.array/gauss_kern.array.max()
         fac = datadict["sfactor"]
@@ -202,6 +202,9 @@ def worker(args):
     )
 
     newim = smooth(datadict, conv_mode=conv_mode)
+    if datadict['4d']:
+        # make it back into a 4D image
+        newim = np.expand_dims(np.expand_dims(newim, axis=0), axis=0)
     datadict.update(
         {
             "newimage": newim,
