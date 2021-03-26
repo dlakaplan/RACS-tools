@@ -151,6 +151,9 @@ def smooth(datadict, conv_mode='robust'):
                 allow_huge=True,
             )
         log.info('Using scaling factor {}'.format(fac))
+        if np.any(np.isnan(newim)):
+            log.warning("{} NaNs present in smoothed output".format(np.isnan(newim).sum()))
+
         newim *= fac
         return newim
 
